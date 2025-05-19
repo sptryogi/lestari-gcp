@@ -1,7 +1,7 @@
 import streamlit as st
 import re
 import string
-from transformers import AutoProcessor, Gemma3ForConditionalGeneration
+from transformers import AutoProcessor, Gemma3ForConditionalGeneration, BitsAndBytesConfig
 from google.cloud import storage
 import torch
 import os
@@ -28,7 +28,19 @@ def download_model_once(bucket="chatbot-models-sunda", model_path="models", loca
         open(os.path.join(local_path, "model_downloaded.flag"), "w").close()
 
 def load_model_from_disk(local_path="/models"):
-    model = Gemma3ForConditionalGeneration.from_pretrained(local_path, device_map="auto").eval()
+    quant_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",  # nf4 biasanya lebih akurat daripada fp4
+    )
+
+    model = Gemma3ForConditionalGeneration.from_pretrained(
+        local_path,
+        device_map="auto",
+        quantization_config=quant_config
+    ).eval()
+
     processor = AutoProcessor.from_pretrained(local_path)
     return model, processor
 
@@ -38,7 +50,6 @@ model, processor = load_model_from_disk()
 
 
 def generate_locally_with_model(history, prompt, max_new_tokens=200):
-    # Susun messages (jika ada riwayat)
     messages = [
         {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]}
     ]
@@ -46,14 +57,13 @@ def generate_locally_with_model(history, prompt, max_new_tokens=200):
         for user_msg, bot_msg, _ in history:
             messages.append({"role": "user", "content": [{"type": "text", "text": user_msg}]})
             messages.append({"role": "assistant", "content": [{"type": "text", "text": bot_msg}]})
-    
+
     messages.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
 
-    # Siapkan input
     inputs = processor.apply_chat_template(
         messages, add_generation_prompt=True, tokenize=True,
         return_dict=True, return_tensors="pt"
-    ).to(device, dtype=torch.bfloat16)
+    ).to(device)
 
     input_len = inputs["input_ids"].shape[-1]
 
