@@ -1,10 +1,11 @@
-# ========== chabotSyahmi.py ==========
 import streamlit as st
 import pandas as pd
 import re
-from AI_chatbot import generate_text_groq2, call_groq_api, kapitalisasi_awal_kalimat
+from AI_chatbot import generate_text_groq2, generate_locally_with_model, kapitalisasi_awal_kalimat
 from constraint1 import highlight_text, constraint_text, ubah_ke_lema, find_the_lema_pair, cari_arti_lema
 from streamlit.components.v1 import html as components_html
+from google.cloud import storage
+from io import BytesIO
 
 st.set_page_config(layout="centered")  # atau "centered"
 
@@ -126,11 +127,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Load kamus
-df_kamus = pd.read_excel("dataset/data_kamus (32).xlsx")
+def load_excel_from_gcs(bucket_name, file_path):
+    client = storage.Client()
+    bucket = client.get_bucket(bucket_name)
+    blob = bucket.blob(file_path)
+    data = blob.download_as_bytes()
+    return pd.read_excel(BytesIO(data))
+
+# Ganti dengan nama bucket dan path yang sesuai
+df_kamus = load_excel_from_gcs("nama-bucket-anda", "path/data_kamus_full_14-5-25.xlsx")
+df_idiom = load_excel_from_gcs("nama-bucket-anda", "path/data_idiom (3).xlsx")
 df_kamus[['ARTI EKUIVALEN 1', 'ARTI 1']] = df_kamus[['ARTI EKUIVALEN 1', 'ARTI 1']].apply(lambda col: col.str.lower())
-df_idiom = pd.read_excel("dataset/data_idiom (3).xlsx")
-# df_paribasa = pd.read_excel("dataset/paribasa 27-3-25.xlsx")
 
 st.title("Chatbot Bahasa Sunda Loma")
 st.write("Selamat datang! Silakan ajukan pertanyaan dalam bahasa Sunda.")
@@ -190,23 +197,11 @@ with st.sidebar:
 
     status = st.toggle("🔍 Lihat Constraint")
 
-def buat_CAG(user_input, df_kamus):
-    hasil = {}
-    kata_input = re.findall(r'\b\w+\b', user_input.lower())
-    for kata in kata_input:
-        baris_cocok = df_kamus[df_kamus["LEMA"] == kata]
-        if not baris_cocok.empty:
-            lema = baris_cocok["LEMA"].values[0]
-            sublema = baris_cocok["SUBLEMA"].values[0] if "SUBLEMA" in baris_cocok else "-"
-            arti = baris_cocok["ARTI EKUIVALEN 1"].values[0]
-            hasil[kata] = {"LEMA": lema, "SUBLEMA": sublema, "ARTI": arti}
-    return hasil
-
 def handle_send():
+    pasangan_cag = {}
     history_for_prompt = st.session_state.chat_history[-50:]
     user_input = st.session_state.user_input
-    pasangan_cag = buat_CAG(user_input, df_kamus)
-
+    
     # Ambil fitur dan mode_bahasa dari session_state
     option = st.session_state.get("fitur_selector", "Chatbot")
     fitur = (
@@ -216,28 +211,32 @@ def handle_send():
     )
     mode_bahasa = st.session_state.get("mode_selector", "Sunda") if fitur == "chatbot" else None
 
-    bot_response = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=history_for_prompt)
-    bot_response2 = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=None)
+    #bot_response = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=history_for_prompt)
+    #bot_response2 = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=None)
 
     # Proses hasil seperti yang kamu punya
     if fitur == "chatbot" and mode_bahasa == "Sunda":
+        bot_response = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=history_for_prompt)
         bot_response_ekuivalen, pasangan_ganti_ekuivalen = ubah_ke_lema(bot_response, df_kamus, df_idiom)
         text_constraint, kata_terdapat, kata_tidak_terdapat, pasangan_kata, pasangan_ekuivalen = highlight_text(bot_response_ekuivalen, df_kamus, df_idiom, fitur)
         text_constraint = kapitalisasi_awal_kalimat(text_constraint)
-    else:
+    elif fitur == "chatbot" and (mode_bahasa == "Indonesia" or mode_bahasa == "English"):
+        bot_response = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=history_for_prompt)
         text_constraint = bot_response
         pasangan_ganti_ekuivalen = {}
         pasangan_ekuivalen = {}
         pasangan_kata = {}
 
-    if option == "Terjemah Sunda → Indo":
+    elif option == "Terjemah Sunda → Indo":
         fitur = "terjemahsundaindo"
+        bot_response2 = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=None)
         bot_response_ekuivalen, pasangan_ganti_ekuivalen = ubah_ke_lema(bot_response2, df_kamus, df_idiom)
         #bot_response_ekuivalen = ubah_ke_lema(bot_response2, df_kamus)
         #text_constraint, kata_terdapat, kata_tidak_terdapat, pasangan_kata, pasangan_ekuivalen = highlight_text(bot_response_ekuivalen, df_kamus, df_idiom, fitur)
-    if option == "Terjemah Indo → Sunda":
+    elif option == "Terjemah Indo → Sunda":
         fitur = "terjemahindosunda"
-        bot_response_ekuivalen, pasangan_ganti_ekuivalen = ubah_ke_lema(bot_response, df_kamus, df_idiom)
+        bot_response2 = generate_text_groq2(user_input, fitur, pasangan_cag, mode_bahasa, history=None)
+        bot_response_ekuivalen, pasangan_ganti_ekuivalen = ubah_ke_lema(bot_response2, df_kamus, df_idiom)
         text_constraint, kata_terdapat, kata_tidak_terdapat, pasangan_kata, pasangan_ekuivalen = highlight_text(bot_response_ekuivalen, df_kamus, df_idiom, fitur)
         text_constraint = kapitalisasi_awal_kalimat(text_constraint)
 
