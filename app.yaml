@@ -1,0 +1,9 @@
+runtime: custom
+env: flex
+
+entrypoint: streamlit run main.py --server.port=$PORT --server.address=0.0.0.0
+
+env_variables:
+  STREAMLIT_SERVER_HEADLESS: true
+  STREAMLIT_SERVER_ENABLECORS: false
+  STREAMLIT_SERVER_ENABLEXsrfProtection: false
