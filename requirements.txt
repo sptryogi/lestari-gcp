@@ -9,5 +9,6 @@ torch
 os
 transformers
 accelerate
+bitsandbytes
 sentencepiece
 Python-IO
