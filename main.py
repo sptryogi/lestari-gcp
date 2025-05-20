@@ -1,3 +1,7 @@
+import os
+os.environ["STREAMLIT_DISABLE_WATCHDOG_WARNINGS"] = "true"
+os.environ["STREAMLIT_WATCH_FILE_SYSTEM"] = "false"
+
 import streamlit as st
 import pandas as pd
 import re
