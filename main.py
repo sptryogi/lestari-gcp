@@ -139,8 +139,8 @@ def load_excel_from_gcs(bucket_name, file_path):
     return pd.read_excel(BytesIO(data))
 
 # Ganti dengan nama bucket dan path yang sesuai
-df_kamus = load_excel_from_gcs("chatbot-models-sunda", "path/data_kamus_full_14-5-25.xlsx")
-df_idiom = load_excel_from_gcs("chatbot-models-sunda", "path/data_idiom (3).xlsx")
+df_kamus = load_excel_from_gcs("chatbot-models-sunda", "dataset/data_kamus_full_14-5-25.xlsx")
+df_idiom = load_excel_from_gcs("chatbot-models-sunda", "dataset/data_idiom (3).xlsx")
 df_kamus[['ARTI EKUIVALEN 1', 'ARTI 1']] = df_kamus[['ARTI EKUIVALEN 1', 'ARTI 1']].apply(lambda col: col.str.lower())
 
 st.title("Chatbot Bahasa Sunda Loma")
